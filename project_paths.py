@@ -1,31 +1,46 @@
 """
-Hardcoded project paths for local runs and Google Colab.
+Hardcoded project paths for Google Colab and local runs.
 
-Colab usage:
-    exec(open("/content/Siemens-road/run_pipeline.py").read())
+Colab — run the pipeline:
+    from google.colab import drive
+    drive.mount("/content/drive")
+    exec(open("/content/Siemens-Road/run_pipeline.py").read())
 
-The Colab root is hardcoded below. When that folder does not exist (e.g. on
-Windows), the directory containing this file is used instead.
+Layout:
+  - Python code:  /content/Siemens-Road/
+  - Data folders: Google Drive (input / processing / output)
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-# Hardcoded Colab root — upload the project to /content/Siemens-road/
-_COLAB_BASE_DIR = Path("/content/Siemens-Road")
+# Where .py files live (upload scripts here in Colab).
+_COLAB_CODE_DIRS = (
+    Path("/content/Siemens-Road"),
+    Path("/content/Siemens-road"),
+)
 _SCRIPT_DIR = Path(__file__).resolve().parent
 
-BASE_DIR = next((path for path in _COLAB_BASE_DIRS if path.is_dir()), _SCRIPT_DIR)
+BASE_DIR = next((path for path in _COLAB_CODE_DIRS if path.is_dir()), _SCRIPT_DIR)
 
-INPUT_DIR = Path("/content/drive/Shareddrives/FA Ops Europe: Rate Maintenance Team /Documents/AI Adoption RMT/RMT Siemens/Siemens Road/input")
-PROCESSING_DIR = Path("/content/drive/Shareddrives/FA Ops Europe: Rate Maintenance Team /Documents/AI Adoption RMT/RMT Siemens/Siemens Road/processing")
-OUTPUT_DIR = Path("/content/drive/Shareddrives/FA Ops Europe: Rate Maintenance Team /Documents/AI Adoption RMT/RMT Siemens/Siemens Road/output")
+# Google Drive data root (input / processing / output).
+_DRIVE_DATA_ROOT = Path(
+    "/content/drive/Shareddrives/FA Ops Europe: Rate Maintenance Team "
+    "/Documents/AI Adoption RMT/RMT Siemens/Siemens Road"
+)
+
+if _DRIVE_DATA_ROOT.is_dir():
+    INPUT_DIR = _DRIVE_DATA_ROOT / "input"
+    PROCESSING_DIR = _DRIVE_DATA_ROOT / "processing"
+    OUTPUT_DIR = _DRIVE_DATA_ROOT / "output"
+else:
+    INPUT_DIR = BASE_DIR / "input"
+    PROCESSING_DIR = BASE_DIR / "processing"
+    OUTPUT_DIR = BASE_DIR / "output"
 
 
 def ensure_project_dirs() -> None:
     INPUT_DIR.mkdir(parents=True, exist_ok=True)
     PROCESSING_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-
