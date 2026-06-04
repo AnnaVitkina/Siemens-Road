@@ -18,9 +18,9 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 
 BASE_DIR = _COLAB_BASE_DIR if _COLAB_BASE_DIR.exists() else _SCRIPT_DIR
 
-INPUT_DIR = BASE_DIR / "input"
-PROCESSING_DIR = BASE_DIR / "processing"
-OUTPUT_DIR = BASE_DIR / "output"
+INPUT_DIR = Path("/content/drive/Shareddrives/FA Ops Europe: Rate Maintenance Team /Documents/AI Adoption RMT/RMT Siemens/Siemens Road/input")
+PROCESSING_DIR = Path("/content/drive/Shareddrives/FA Ops Europe: Rate Maintenance Team /Documents/AI Adoption RMT/RMT Siemens/Siemens Road/processing")
+OUTPUT_DIR = Path("/content/drive/Shareddrives/FA Ops Europe: Rate Maintenance Team /Documents/AI Adoption RMT/RMT Siemens/Siemens Road/output")
 
 
 def ensure_project_dirs() -> None:
