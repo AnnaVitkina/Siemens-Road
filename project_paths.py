@@ -16,7 +16,7 @@ from pathlib import Path
 _COLAB_BASE_DIR = Path("/content/Siemens-Road")
 _SCRIPT_DIR = Path(__file__).resolve().parent
 
-BASE_DIR = _COLAB_BASE_DIR if _COLAB_BASE_DIR.exists() else _SCRIPT_DIR
+BASE_DIR = next((path for path in _COLAB_BASE_DIRS if path.is_dir()), _SCRIPT_DIR)
 
 INPUT_DIR = Path("/content/drive/Shareddrives/FA Ops Europe: Rate Maintenance Team /Documents/AI Adoption RMT/RMT Siemens/Siemens Road/input")
 PROCESSING_DIR = Path("/content/drive/Shareddrives/FA Ops Europe: Rate Maintenance Team /Documents/AI Adoption RMT/RMT Siemens/Siemens Road/processing")
@@ -27,3 +27,5 @@ def ensure_project_dirs() -> None:
     INPUT_DIR.mkdir(parents=True, exist_ok=True)
     PROCESSING_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+
