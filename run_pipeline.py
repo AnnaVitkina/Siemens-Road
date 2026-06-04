@@ -8,10 +8,9 @@ Steps:
   4. Build matrix workbook + zones txt in output/
 
 Google Colab:
-    exec(open("/content/Siemens-road/run_pipeline.py").read())
-
-Local (adjust BASE_DIR in project_paths.py if needed):
-    python run_pipeline.py
+    from google.colab import drive
+    drive.mount("/content/drive")
+    exec(open("/content/Siemens-Road/run_pipeline.py").read())
 """
 
 from __future__ import annotations
@@ -20,11 +19,16 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-# Colab-safe: ensure the project folder is on sys.path when run via exec(open(...)).
-from project_paths import BASE_DIR, INPUT_DIR, OUTPUT_DIR, PROCESSING_DIR, ensure_project_dirs
+# Must run before any project imports — exec(open(...)) does not set sys.path automatically.
+_COLAB_PROJECT_DIRS = (
+    Path("/content/Siemens-Road"),
+    Path("/content/Siemens-road"),
+)
+PROJECT_DIR = next((path for path in _COLAB_PROJECT_DIRS if path.is_dir()), _COLAB_PROJECT_DIRS[0])
+if str(PROJECT_DIR) not in sys.path:
+    sys.path.insert(0, str(PROJECT_DIR))
 
-if str(BASE_DIR) not in sys.path:
-    sys.path.insert(0, str(BASE_DIR))
+from project_paths import BASE_DIR, INPUT_DIR, OUTPUT_DIR, PROCESSING_DIR, ensure_project_dirs  # noqa: E402
 
 from build_rate_card_matrix import (  # noqa: E402
     MatrixBuildResult,
@@ -51,10 +55,12 @@ class PipelineResult:
 def run_interactive_pipeline() -> PipelineResult:
     ensure_project_dirs()
 
-    print(f"Project folder: {BASE_DIR}")
+    print(f"Code folder:    {BASE_DIR}")
     print(f"  input/       -> {INPUT_DIR}")
     print(f"  processing/  -> {PROCESSING_DIR}")
     print(f"  output/      -> {OUTPUT_DIR}")
+    if INPUT_DIR != BASE_DIR / "input":
+        print("  (data folders on Google Drive)")
     print()
 
     input_files = list_input_files()
