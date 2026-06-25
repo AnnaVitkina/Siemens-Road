@@ -38,7 +38,7 @@ THIN_BORDER = Border(
     top=Side(style="thin", color="B4B4B4"),
     bottom=Side(style="thin", color="B4B4B4"),
 )
-PRICE_NUMBER_FORMAT = "#,##0.00"
+PRICE_NUMBER_FORMAT = "0.00"
 
 SHIPMENT_BLOCKS = {"Lane / Zoning", "Service"}
 IGNORED_COLUMNS = {"Owner", "Valid from", "Valid to", "Rate Card Name"}
@@ -50,7 +50,7 @@ COLUMN_RENAMES = {
     "Destination Zone": "Destination Postal Code Zone",
 }
 
-PRICING_TYPES = {"Price per shipment", "Price per 100kg", "max"}
+PRICING_TYPES = {"price per shipment", "price per 100kg", "max"}
 
 
 @dataclass
@@ -263,11 +263,12 @@ def _build_cost_blocks(columns: pd.Index) -> list[MatrixCostBlock]:
     for column in columns:
         service_name = str(column[0]).strip()
         pricing_type = str(column[1]).strip()
+        pricing_type_normalized = pricing_type.lower()
         bottom_label = _normalize_column_label(str(column[2]))
 
         if bottom_label in IGNORED_COLUMNS or service_name in SHIPMENT_BLOCKS or not service_name:
             continue
-        if pricing_type not in PRICING_TYPES:
+        if pricing_type_normalized not in PRICING_TYPES:
             continue
 
         if current_service != service_name:
@@ -279,8 +280,8 @@ def _build_cost_blocks(columns: pd.Index) -> list[MatrixCostBlock]:
                 cost_name=f"Transport cost ({service_name})",
             )
 
-        rate_unit = _get_rate_unit(pricing_type)
-        for bracket_label in _parse_weight_bracket(bottom_label, pricing_type):
+        rate_unit = _get_rate_unit(pricing_type_normalized)
+        for bracket_label in _parse_weight_bracket(bottom_label, pricing_type_normalized):
             current_block.columns.append(
                 MatrixCostColumn(
                     service_name=service_name,
@@ -367,6 +368,88 @@ def _split_ltl_blocks_by_bulkiness(
             )
 
     return split_blocks
+
+
+def _find_ftl_max_source_column(blocks: list[MatrixCostBlock]) -> tuple[str, str, str] | None:
+    for block in blocks:
+        if "ftl" not in block.service_name.lower():
+            continue
+        for column in block.columns:
+            if column.bracket_label == "MAX":
+                return column.source_column
+    return None
+
+
+def _ltl_bulkiness_blocks_missing_max(blocks: list[MatrixCostBlock]) -> bool:
+    return any(
+        block.bulkiness_value is not None
+        and not any(column.bracket_label == "MAX" for column in block.columns)
+        for block in blocks
+    )
+
+
+def _add_ltl_max_from_ftl(
+    blocks: list[MatrixCostBlock],
+    ftl_max_source_column: tuple[str, str, str] | None,
+) -> list[MatrixCostBlock]:
+    if ftl_max_source_column is None:
+        return blocks
+
+    updated_blocks: list[MatrixCostBlock] = []
+    for block in blocks:
+        if block.bulkiness_value is None:
+            updated_blocks.append(block)
+            continue
+        if any(column.bracket_label == "MAX" for column in block.columns):
+            updated_blocks.append(block)
+            continue
+
+        updated_blocks.append(
+            MatrixCostBlock(
+                service_name=block.service_name,
+                cost_name=block.cost_name,
+                columns=[
+                    *block.columns,
+                    MatrixCostColumn(
+                        service_name=block.service_name,
+                        source_column=ftl_max_source_column,
+                        bracket_label="MAX",
+                        rate_unit="Flat",
+                    ),
+                ],
+                bulkiness_value=block.bulkiness_value,
+            )
+        )
+
+    return updated_blocks
+
+
+def prompt_yes_no(question: str, default: bool = False) -> bool:
+    default_hint = "Y/n" if default else "y/N"
+    while True:
+        raw = input(f"{question} [{default_hint}]: ").strip().lower()
+        if not raw:
+            return default
+        if raw in {"y", "yes"}:
+            return True
+        if raw in {"n", "no"}:
+            return False
+        print("Please enter y or n.")
+
+
+def prompt_add_ltl_max_from_ftl(rate_card: pd.DataFrame) -> bool:
+    cost_blocks = _build_cost_blocks(rate_card.columns)
+    cost_blocks = _split_ltl_blocks_by_bulkiness(cost_blocks, rate_card)
+    if not _ltl_bulkiness_blocks_missing_max(cost_blocks):
+        return False
+    if _find_ftl_max_source_column(_build_cost_blocks(rate_card.columns)) is None:
+        print("LTL has no MAX column and no FTL MAX source was found — skipping LTL MAX.")
+        return False
+
+    return prompt_yes_no(
+        "Add MAX (Flat) to all LTL bulkiness blocks using values from FTL MAX?",
+        default=False,
+    )
 
 
 def _build_cost_columns(
@@ -616,13 +699,17 @@ def build_rate_card_matrix(
     rate_card: pd.DataFrame,
     output_path: Path,
     accessorial_costs: pd.DataFrame | None = None,
+    add_ltl_max_from_ftl: bool = False,
 ) -> MatrixBuildResult:
     if not isinstance(rate_card.columns, pd.MultiIndex):
         raise ValueError("Rate Card dataframe must have a 3-level MultiIndex header.")
 
     shipment_columns = _build_shipment_columns(rate_card.columns)
     cost_blocks = _build_cost_blocks(rate_card.columns)
+    ftl_max_source_column = _find_ftl_max_source_column(cost_blocks)
     cost_blocks = _split_ltl_blocks_by_bulkiness(cost_blocks, rate_card)
+    if add_ltl_max_from_ftl:
+        cost_blocks = _add_ltl_max_from_ftl(cost_blocks, ftl_max_source_column)
     cost_blocks = _filter_empty_cost_blocks(cost_blocks, rate_card)
     shipment_headers, matrix_rows = _build_matrix_rows(rate_card, shipment_columns, cost_blocks)
 
@@ -671,13 +758,18 @@ def load_extracted_accessorial_costs(processing_file: Path) -> pd.DataFrame:
     return pd.read_excel(processing_file, sheet_name="Accessorial Costs", header=0)
 
 
-def build_matrix_from_extraction_result(extraction_result, output_file: Path | None = None) -> MatrixBuildResult:
+def build_matrix_from_extraction_result(
+    extraction_result,
+    output_file: Path | None = None,
+    add_ltl_max_from_ftl: bool = False,
+) -> MatrixBuildResult:
     if output_file is None:
         output_file = OUTPUT_DIR / f"{extraction_result.source_file.stem}_matrix.xlsx"
     matrix_result = build_rate_card_matrix(
         extraction_result.rate_card,
         output_file,
         accessorial_costs=extraction_result.accessorial_costs,
+        add_ltl_max_from_ftl=add_ltl_max_from_ftl,
     )
 
     zones_output = OUTPUT_DIR / f"{extraction_result.source_file.stem}_zones.txt"
@@ -702,6 +794,7 @@ def build_matrix_from_extraction_result(extraction_result, output_file: Path | N
 def build_matrix_from_processing_file(
     processing_file: Path,
     output_file: Path | None = None,
+    add_ltl_max_from_ftl: bool = False,
 ) -> MatrixBuildResult:
     rate_card = load_extracted_rate_card(processing_file)
     accessorial_costs = load_extracted_accessorial_costs(processing_file)
@@ -711,6 +804,7 @@ def build_matrix_from_processing_file(
         rate_card,
         output_file,
         accessorial_costs=accessorial_costs,
+        add_ltl_max_from_ftl=add_ltl_max_from_ftl,
     )
 
     zones_output = OUTPUT_DIR / f"{processing_file.stem}_zones.txt"
@@ -757,7 +851,12 @@ def run_interactive_matrix_build() -> MatrixBuildResult:
                 break
         print("Invalid choice. Try again.")
 
-    result = build_matrix_from_processing_file(selected_file)
+    rate_card = load_extracted_rate_card(selected_file)
+    add_ltl_max_from_ftl = prompt_add_ltl_max_from_ftl(rate_card)
+    result = build_matrix_from_processing_file(
+        selected_file,
+        add_ltl_max_from_ftl=add_ltl_max_from_ftl,
+    )
     print(f"\nSaved matrix rate card to: {result.matrix_path}")
     print(f"Data rows: {result.row_count}")
     print(f"Shipment columns: {result.shipment_column_count}")
