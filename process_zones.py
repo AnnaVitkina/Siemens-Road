@@ -223,22 +223,21 @@ def _process_corporate_zones(
 
 def _process_address_zones(address_zones_df: pd.DataFrame) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
-    grouped_postal_codes: dict[tuple[str, str, str, str], set[str]] = {}
+    grouped_postal_codes: dict[tuple[str, str], set[str]] = {}
 
     for _, row in address_zones_df.iterrows():
         iso_text = "" if pd.isna(row["ISO"]) else str(row["ISO"]).strip()
         zone_text = _normalize_zone_value(row["Zone"])
         zip_text = _normalize_zip(row["ZIP"])
-        street_text = "" if pd.isna(row["Street"]) else str(row["Street"]).strip()
         if not iso_text or not zip_text:
             continue
 
-        key = (iso_text, zone_text, zip_text, street_text)
+        key = (iso_text, zone_text)
         grouped_postal_codes.setdefault(key, set()).update(
             _build_address_postal_codes(row["ZIP"], row["Street"])
         )
 
-    for (iso_text, zone_text, _zip_text, _street_text), postal_codes in grouped_postal_codes.items():
+    for (iso_text, zone_text), postal_codes in grouped_postal_codes.items():
         rows.append(
             {
                 "Zone name": f"{iso_text} Zone {zone_text}",
