@@ -33,6 +33,7 @@ from project_paths import BASE_DIR, INPUT_DIR, OUTPUT_DIR, PROCESSING_DIR, ensur
 from build_rate_card_matrix import (  # noqa: E402
     MatrixBuildResult,
     build_matrix_from_extraction_result,
+    prompt_add_ltl_max_from_ftl,
 )
 from extract_rate_card import (  # noqa: E402
     DEFAULT_SHEETS,
@@ -112,7 +113,11 @@ def run_interactive_pipeline() -> PipelineResult:
     print(f"  Address Zones rows: {len(extraction.address_zones)}")
 
     print("\n--- Step 2/2: Building matrix workbook and zones file ---")
-    matrix = build_matrix_from_extraction_result(extraction)
+    add_ltl_max_from_ftl = prompt_add_ltl_max_from_ftl(extraction.rate_card)
+    matrix = build_matrix_from_extraction_result(
+        extraction,
+        add_ltl_max_from_ftl=add_ltl_max_from_ftl,
+    )
     print(f"Saved matrix workbook: {matrix.matrix_path}")
     print(f"  Data rows: {matrix.row_count}")
     print(f"  Shipment columns: {matrix.shipment_column_count}")
