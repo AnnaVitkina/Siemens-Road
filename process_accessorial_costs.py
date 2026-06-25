@@ -133,7 +133,7 @@ THIN_BORDER = Border(
     top=Side(style="thin", color="B4B4B4"),
     bottom=Side(style="thin", color="B4B4B4"),
 )
-PRICE_NUMBER_FORMAT = "#,##0.00"
+PRICE_NUMBER_FORMAT = "0.00"
 
 
 def _normalize_service_name(value: object) -> str:
